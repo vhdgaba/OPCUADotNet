@@ -14,6 +14,7 @@ namespace OPCUATestServer
         private OpcNodeHistorian hcsHistorian;
         private OpcAlarmConditionNode temperatureCriticalNode;
         private OpcAnalogItemNode<int> tempDataNode1;
+
         public NodeManager() : base("http://vhgsystems.com/")
         {
         }
@@ -105,8 +106,8 @@ namespace OPCUATestServer
 
         private void SimulateTemperature(int run, Random random)
         {
-            //var temperatureValue = run;
-            var temperatureValue = random.Next(12, 20 * (((run % 7) / 4) + 1));
+            var temperatureValue = run;
+            //var temperatureValue = random.Next(12, 20 * (((run % 7) / 4) + 1));
             this.tempDataNode1.Value = temperatureValue;
 
             // This will trigger DataChange notification being send to DataChange subscriptions.
@@ -121,7 +122,7 @@ namespace OPCUATestServer
                 var message = "The temperature is higher than 20°C!";
                 var severity = OpcEventSeverity.Low;
 
-                if (temperatureValue > 30)
+                if (temperatureValue > 30 && temperatureValue <= 40)
                 {
                     message = "The temperature is higher than 30°C!";
                     severity = OpcEventSeverity.Medium;
@@ -131,7 +132,7 @@ namespace OPCUATestServer
                     message = "The temperature is higher than 40°C!";
                     severity = OpcEventSeverity.High;
                 }
-                else
+                else if (temperatureValue > 50)
                 {
                     message = "The temperature exceeded 50°C!";
                     severity = OpcEventSeverity.Max;
