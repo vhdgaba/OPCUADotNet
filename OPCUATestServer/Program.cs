@@ -15,6 +15,7 @@ namespace OPCUATestServer
 
             var server = new OpcServer($"opc.tcp://localhost:{port}/", nodeManager);
             server.Start();
+            InfluxConnector.InitializeClient();
 
             using (var semaphore = new SemaphoreSlim(0))
             {
@@ -27,6 +28,7 @@ namespace OPCUATestServer
                 semaphore.Release();
                 thread.Join();
 
+                InfluxConnector.DisposeClient();
                 server.Stop();
             }
         }

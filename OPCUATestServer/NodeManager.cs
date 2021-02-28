@@ -11,25 +11,30 @@ namespace OPCUATestServer
 {
     internal class NodeManager : OpcNodeManager
     {
-        private OpcNodeHistorian hcsHistorian;
+    //    private OpcNodeHistorian hcsHistorian;
         private OpcAlarmConditionNode temperatureCriticalNode;
         private OpcAnalogItemNode<int> tempDataNode1;
+        private InfluxHistorian influxHistorian;
+        public InfluxHistorian InfluxHistorianObject
+        {
+            get => this.influxHistorian;
+        }
 
         public NodeManager() : base("http://vhgsystems.com/")
         {
         }
         protected override IEnumerable<IOpcNode> CreateNodes(OpcNodeReferenceCollection references)
         {
-
             this.tempDataNode1 = new OpcAnalogItemNode<int>("Value", 25);
-            this.hcsHistorian = new OpcNodeHistorian(this, tempDataNode1); 
-            hcsHistorian.AutoUpdateHistory = true; 
-            
+       //     this.hcsHistorian = new OpcNodeHistorian(this, tempDataNode1);
+       //     hcsHistorian.AutoUpdateHistory = true;
+            this.influxHistorian = new InfluxHistorian(this, tempDataNode1);
+
 
             var tempDataNode2 = new OpcDataVariableNode<string>("State", "ON");
             var lightDataNode = new OpcDataVariableNode<string>("State", "ON");
             var doorDataNode = new OpcDataVariableNode<string>("State", "LOCKED");
-
+            
             var temperatureNode = new OpcObjectNode("Temperature-Sensor", this.tempDataNode1, tempDataNode2);
             var lightNode = new OpcObjectNode("Light", lightDataNode);
             var doorNode = new OpcObjectNode("Door", doorDataNode);
@@ -44,15 +49,16 @@ namespace OPCUATestServer
             var rootNode = new OpcFolderNode(new OpcName("Home Control System", this.DefaultNamespaceIndex), temperatureNode, lightNode, doorNode);
 
             references.Add(rootNode, OpcObjectTypes.ObjectsFolder);
-            CreateHistoryEntries(hcsHistorian);
-            
+      //     CreateHistoryEntries(hcsHistorian);
+
             yield return rootNode;
         }
         protected override IOpcNodeHistoryProvider RetrieveNodeHistoryProvider(IOpcNode node)
         {
-            if (this.hcsHistorian.Node == node)
-                return hcsHistorian;
-
+            //      if (this.hcsHistorian.Node == node)
+            //          return hcsHistorian;
+            if (this.influxHistorian.Node == node)
+                return influxHistorian;
             return base.RetrieveNodeHistoryProvider(node);
         }
 
@@ -61,7 +67,7 @@ namespace OPCUATestServer
             for (int second = 0; second < 3600; second++)
             {
                 var value = new OpcHistoryValue(
-                        1000 + second, DateTime.UtcNow.Date.AddHours(6).AddSeconds(second));
+                        10 + second, DateTime.UtcNow.Date.AddHours(6).AddSeconds(second));
 
                 if ((second % 30) == 0)
                 {
@@ -84,12 +90,12 @@ namespace OPCUATestServer
             // By default we define each condition as acknowledged, because we will change it 
             // depending on outcome of the evaluations bound to the alarms.
             //          this.positionLimitNode.ChangeIsAcked(this.SystemContext, true);
-            this.temperatureCriticalNode.ChangeIsAcked(this.SystemContext, true);
+            this.temperatureCriticalNode.ChangeIsAcked(this.SystemContext, false);
 
             var run = 0;
             var random = new Random(45);
 
-            while (!semaphore.Wait(1000))
+            while (!semaphore.Wait(3000))
             {
                 // Only perform "job"-simulation in case the "machine" is active.
                 //if (!this.isActiveNode.Value)
@@ -106,16 +112,27 @@ namespace OPCUATestServer
 
         private void SimulateTemperature(int run, Random random)
         {
-            var temperatureValue = run;
-            //var temperatureValue = random.Next(12, 20 * (((run % 7) / 4) + 1));
+            //var temperatureValue = run;
+            var temperatureValue = random.Next(12, 20 * (((run % 7) / 4) + 1));
             this.tempDataNode1.Value = temperatureValue;
 
             // This will trigger DataChange notification being send to DataChange subscriptions.
             this.tempDataNode1.ApplyChanges(this.SystemContext);
 
+
+            Console.WriteLine($"Run: {run}");
+            var timestamp = DateTime.UtcNow;
+      //      OpcStatusCode opc = new OpcStatusCode();
+            var value = new OpcHistoryValue(temperatureValue, timestamp);
+            influxHistorian.History.Add(value);
+
+
+
             if (temperatureValue <= 20)
             {
                 this.temperatureCriticalNode.ChangeIsActive(this.SystemContext, false);
+                this.temperatureCriticalNode.Message = null;
+                this.temperatureCriticalNode.ChangeSeverity(this.SystemContext, OpcEventSeverity.Undefined);
             }
             else
             {
@@ -149,6 +166,8 @@ namespace OPCUATestServer
             }
             this.temperatureCriticalNode.ReportEventFrom(
                     this.SystemContext, this.tempDataNode1);
+
+            Thread.Sleep(2000);
         }
 
     }
